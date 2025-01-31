@@ -59,7 +59,7 @@ python bot.py
 If deploying on a VPS, consider using `nohup` or `tmux` to keep it running:
 
 ```bash
-nohup python bot.py &
+nohup python bot.py
 ```
 
 ## Deployment
