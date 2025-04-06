@@ -8,10 +8,10 @@ from aiohttp import ClientTimeout
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 load_dotenv()  # Load environment variables from a .env file
 
-# Retrieve the Telegram bot token and DeepSeek API key from environment variables
+# Retrieve the Telegram bot token and Gemini API key from environment variables
 TELEGRAM_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
-DEEPSEEK_API_KEY = os.getenv('DEEPSEEK_API_KEY')
-if not all([TELEGRAM_TOKEN, DEEPSEEK_API_KEY]):
+GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
+if not all([TELEGRAM_TOKEN, GEMINI_API_KEY]):
     raise ValueError("Missing required environment variables")
 
 # Set default timeout for HTTP requests and rate limit for bot responses
@@ -42,24 +42,37 @@ def rate_limit(func):
 # Initialize the Telegram bot with the provided token
 bot = telebot.TeleBot(TELEGRAM_TOKEN)
 
-# Asynchronous function to call the DeepSeek language model API
+# Asynchronous function to call the Gemini language model API
 async def call_language_model(prompt, session):
     try:
         async with session.post(
-            "https://api.deepseek.com/v1/chat/completions",
-            headers={"Authorization": f"Bearer {DEEPSEEK_API_KEY}", "Content-Type": "application/json"},
+            "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent",
+            headers={"Content-Type": "application/json"},
+            params={"key": os.getenv("GEMINI_API_KEY")},
             json={
-                "model": "deepseek-chat",
-                "messages": [
-                    {"role": "system", "content": "Act as a professional translation assistant specializing in English-Persian and Persian-English translations. Your task is to provide accurate and contextually appropriate translations while maintaining a formal tone. When translating, ensure the cultural nuances of both languages are preserved. If a word or phrase has multiple possible translations, choose the one that best fits the context. Always present your translations clearly and concisely. Explanation: Role and Specialization: Clearly defines the AI's role as a translation assistant with expertise in English and Persian. Accuracy and Context: Emphasizes the importance of accuracy and contextual relevance in translations. Cultural Nuances: Instructs the AI to consider cultural aspects, which is crucial in translation tasks. Multiple Translations: Provides guidance on handling words or phrases with multiple translations. Clarity and Conciseness: Ensures that the output is professional and easy to understand."},
-                    {"role": "user", "content": prompt}
+                "contents": [
+                    {
+                        "parts": [
+                            {
+                                "text": "Translate between English and Persian (Farsi) with accuracy and cultural awareness. "
+                                        "Ensure contextually appropriate translations, maintaining a formal tone. "
+                                        "If multiple translations exist, choose the most suitable one. "
+                                        "Keep responses clear, concise, and professional.\n\n"
+                                        "Text: " + prompt
+                            }
+                        ]
+                    }
                 ],
                 "temperature": 0.7,
-                "max_tokens": 1000
+                "max_output_tokens": 500,
             }
         ) as response:
-            # Return the translated text if the request is successful, otherwise return an error message
-            return (await response.json())["choices"][0]["message"]["content"].strip() if response.status == 200 else "Translation service error"
+            if response.status == 200:
+                response_json = await response.json()
+                return response_json["candidates"][0]["content"]["parts"][0]["text"].strip()
+            else:
+                logger.error(f"API error: {response.status} - {await response.text()}")
+                return "Translation service error"
     except Exception as e:
         logger.error(f"Error: {str(e)}")
         return "An error occurred during translation"
